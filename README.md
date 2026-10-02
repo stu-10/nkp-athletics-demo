@@ -1,131 +1,162 @@
 # Cloud Native Games
 
-A purple, white and charcoal retro athletics demo for Nutanix Kubernetes Platform. Browser-based athletics with a solo 100m sprint, a local two-player VS race, and long jump, original canvas artwork, keyboard/touch controls, false starts and solo personal bests stored in the browser.
+A purple, white and charcoal browser athletics demo for Nutanix Kubernetes Platform (NKP). Choose **100m Sprint**, **VS Race**, or **Long Jump**, play with keyboard or touch controls, and submit your name and company to the event's shared leaderboard.
 
 ## Run locally
 
-Requires Node.js 24 or newer. No npm install is needed.
+Requires **Node.js 24 or newer**. The app uses Node's built-in HTTP server and SQLite module; no npm install or separate database service is needed.
 
 ```sh
 npm start
 ```
 
-Open http://localhost:8080 and choose a game from the menu:
+Open `http://localhost:8080` in your browser. The server listens on port 8080 by default. Set `PORT` to use another port. Choose an event from the game menu, select **Start race** or **Start attempt**, and wait for the three-second countdown to reach GO.
 
-- **100m Sprint:** the original solo race. Select Start race, wait three seconds for GO, then alternate A/L or the left/right arrow keys. Touch players use the two step buttons. Solo personal bests remain stored in that browser.
-- **VS Race:** two players on one keyboard/shared screen. Player 1 (white) alternates **A/S**; Player 2 (gold) alternates **K/L**. Both start on the same GO, and the first to 100m wins. A false start awards the race to the other player; equal finish times within one millisecond produce a dead heat. Each player also has separate touch buttons. VS results do not change solo personal bests.
+### Events and controls
 
-Use Game menu to switch events; switching resets the current race. Held keys and repeated presses of the same side do not accelerate an athlete. Hiding the browser tab resets an active race. VS is local multiplayer, so no second browser, network session, or backend service is required.
+| Event | Keyboard controls | Goal | Leaderboard |
+|---|---|---|---|
+| **100m Sprint** | Alternate **A / L** or **← / →** | Finish 100m as quickly as possible | Fastest times first |
+| **VS Race** | Player 1 (white): **A / S**; Player 2 (gold): **K / L** | First player to reach 100m wins | Fastest qualifying finish times first |
+| **Long Jump** | Alternate **A / L** or **← / →**, then **Space** to jump | Build speed and jump just before the take-off board | Longest distances first |
+
+All events have touch step buttons; Long Jump also has a **JUMP** button. Held keys and repeated presses of the same side do not add speed. Steady alternating steps build speed, and the athlete slows without input.
+
+**100m Sprint:** taking a step before GO causes a false start. Your best sprint time is saved in that browser.
+
+**VS Race:** two players share one keyboard or touch screen and the same starting gun. A false start awards the race to the other player. Finish times within one millisecond produce a dead heat. The race stops at the first finish; only players who actually reach 100m may submit a time. A dead heat offers both players a submission form. VS results do not change your solo personal best.
+
+**Long Jump:** accelerate along the 30m runway, then press Space just before the white take-off board. A prompt appears near the board to help time the jump. More speed and a take-off closer to the board produce a longer jump. The athlete follows a flight arc, and the landing distance is measured from the board in metres. Crossing the board without jumping is a foul. Jumping so early that you miss the sand also gives no valid distance. Input before GO causes a false start. Jump personal bests are stored separately from sprint times.
+
+Use **Game menu** to switch events. Switching events or hiding the browser tab cancels an active attempt. Opening the leaderboard during an attempt also cancels it; start a fresh attempt after closing the leaderboard. VS multiplayer is local; players do not need a second browser or a network session.
+
+## Shared leaderboards
+
+Each game has a **Leaderboard** button showing its top 100 submitted results. Sprint and VS rank by time ascending; Long Jump ranks by distance descending. Rankings use full-precision values, while the display shows two decimal places.
+
+After a qualifying finish or landing, **name and company inputs appear in the main result overlay beside your time or distance**. Select **Submit time** or **Submit distance** to save the result. Submissions are optional, and names and companies are visible to everyone using the app. False starts, foul jumps, and unfinished VS players have no qualifying result. Replaying hides the previous submission forms.
+
+Results are shared across browsers and persist across server restarts. Browser personal bests remain separate from the shared rankings. Duplicate retries of the same submission do not create another entry.
+
+### Storage and configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `8080` | HTTP server port |
+| `LEADERBOARD_DB` | `./data/leaderboard.sqlite` | SQLite database file; its directory must be writable |
+| `DEMO_BANNER` | `Built to run anywhere. Powered by NKP.` | Platform banner text |
+| `APP_VERSION` | `0.1.0` | Version shown in the footer and `/version.json` |
+| `APP_COMMIT` | `local` | Build commit shown in the footer and `/version.json` |
+
+The server creates the database and required tables automatically. The local `data/` directory is ignored by Git and excluded from Docker images. Long Jump uses a separate table in the same database, preserving existing Sprint and VS records. No database credentials are required. Back up the database file with the server stopped to preserve results safely.
+
+The leaderboards are intended for a trusted demo: results are supplied by the browser and are not independently verified. There is no authenticated player identity or moderation interface.
+
+## Checks and container development
 
 ```sh
 npm run check
 npm test
 docker build -t cloud-native-games:local .
-docker run --rm -p 8080:8080 cloud-native-games:local
 ```
+
+For persistent container results, create a named volume and make it writable by the app's non-root user:
+
+```sh
+docker volume create cloud-native-games-data
+docker run --rm --user 0 \
+  -v cloud-native-games-data:/data \
+  cloud-native-games:local chown 1000:1000 /data
+docker run --rm --read-only -p 8080:8080 \
+  -e LEADERBOARD_DB=/data/leaderboard.sqlite \
+  -v cloud-native-games-data:/data \
+  cloud-native-games:local
+```
+
+The volume retains leaderboard results after the container stops. Removing the volume removes those results. A read-only container needs the writable database mount shown above.
 
 ## Delivery flow
 
-Application commit → GitHub Actions tests → multi-architecture image in GHCR → exact image digest committed into `deploy/overlays/demo/kustomization.yaml` → NKP GitOps reconciles that directory → Kubernetes rolling update.
+Application commit → GitHub Actions tests → multi-architecture image in GHCR → exact image digest committed into `deploy/overlays/demo/kustomization.yaml` → NKP GitOps reconciliation → replacement of the application pod.
 
-CI never calls the cluster API. Manifest-only commits are reconciled without an image build. The digest update does not start another build. Application version and build commit are available at `/version.json` and displayed in the footer. `DEMO_BANNER` is a pod environment variable that can be changed declaratively in the Deployment.
+The publishing workflow targets `ghcr.io/stu-10/nkp-athletics-demo` for Linux amd64 and arm64. CI never calls the cluster API. Manifest-only commits are reconciled without an image build, and the digest update does not start another build. Keep the workflow's package-write and repository-write permissions enabled and preserve the GHCR package's public visibility. Branch rules must permit the workflow's digest commit; if bot pushes are prohibited, adapt delivery to deployment pull requests.
 
 ## Connect NKP GitOps
 
-The repository deploys the application and an HTTP LoadBalancer Service into the target namespace selected in NKP GitOps. The manifests intentionally omit a fixed namespace, so the same repository can be used across clusters and projects. It does not create a namespace or install Flux.
-
-Use these settings in NKP's existing GitOps application/source configuration:
+The repository deploys a **Deployment**, **HTTP LoadBalancer Service**, and **leaderboard PersistentVolumeClaim**. The manifests omit a fixed namespace, so NKP selects the target project namespace. They do not create a namespace or install Flux.
 
 | Setting | Value |
 |---|---|
 | Repository URL | `https://github.com/stu-10/nkp-athletics-demo.git` |
 | Branch | `main` |
 | Application path | `./` (repository root) |
-| Target namespace | Select the existing project namespace for that cluster in NKP |
+| Target namespace | Select the existing project namespace in NKP |
 | Git authentication | Public repository; no credential required |
 | Registry authentication | Public GHCR image; no image-pull secret required |
-| Reconciliation | Enable pruning and wait/health checks where supported |
+| Reconciliation | Enable pruning and wait/health checks where supported; preserve the leaderboard PVC when removing the application |
 
-If NKP separates adding a Git repository from creating an application, add the repository first, then select the branch and application path above. Connecting a URL alone does not select which manifests to reconcile.
+If NKP separates adding a Git repository from creating an application, add the repository first, then select the branch and application path. Connecting a URL alone does not select which manifests to reconcile. The root `kustomization.yaml` includes the demo overlay; `./deploy/overlays/demo` also renders the same resources.
 
-The root `kustomization.yaml` includes the prepared demo overlay. If an existing NKP connection already uses `./deploy/overlays/demo`, that path continues to render the same application.
+### Runtime and storage requirements
 
-### Already completed
+- One application replica, running as UID/GID 1000 with resource limits, health probes, dropped capabilities, and a read-only root filesystem.
+- A **1Gi ReadWriteOnce PVC**, `cloud-native-games-leaderboard`, mounted at `/data`. The pod uses `fsGroup: 1000` for volume access.
+- A default StorageClass capable of provisioning the PVC, with volume permissions compatible with UID/GID 1000.
+- A **Recreate** deployment strategy so one server owns the SQLite database. Updates briefly interrupt service. To run multiple replicas, migrate to an external database first.
+- A LoadBalancer implementation and address pool or cloud provider that can allocate a reachable address. The Service exposes HTTP port 80 to application port 8080.
+- GitOps permissions to manage Deployments, Services, and PVCs in the selected namespace. Configure the reconciler's target namespace explicitly.
+- Cluster egress to GitHub and GHCR, and routing/firewall rules permitting inbound TCP port 80.
 
-- Application committed to `main`, with automated tests and a publishing workflow.
-- Published image available anonymously from `ghcr.io/stu-10/nkp-athletics-demo`, with Linux amd64 and arm64 variants.
-- Deployment overlay pins the published image by SHA-256 digest; no bootstrap image is used by this overlay.
-- Deployment configured with one replica, resource limits, health probes, a non-root user, and a read-only filesystem.
-- Service configured as `LoadBalancer`, exposing HTTP port 80 to application port 8080.
-- Overlay leaves namespace assignment to NKP GitOps without creating or managing a namespace.
-- Manifest rendering checked locally and registered as a GitHub Actions check.
+Results survive pod replacement. **Deleting the PVC removes the stored leaderboard results**; protect it when pruning or removing the application and arrange backups as needed.
 
-No manual first publish, registry secret, ingress, DNS record, TLS certificate, or additional Flux installation is needed for HTTP access through the LoadBalancer address. Optional ingress and Flux examples are outside the application path and are not applied by this connection.
-
-### Cluster requirements
-
-NKP must provide the selected project namespace and configure its GitOps application to apply resources into that namespace (Flux `spec.targetNamespace` or the equivalent NKP setting). Omitting namespace fields alone does not select the destination; confirm the application target namespace in NKP. The GitOps reconciler must have permission to manage Deployments and Services there. A configured load balancer implementation and address pool or cloud provider must allocate an address reachable from your client network. Cluster egress must reach GitHub and GHCR; routing and firewall rules must permit inbound TCP port 80. These cluster-specific capabilities cannot be supplied by this application repository and have not been verified against your cluster.
-
-For an isolated cluster, mirror the image and Git source into reachable services before connecting. If you require a custom hostname and HTTPS, configure the optional ingress example with your controller, DNS and TLS settings separately; the default LoadBalancer endpoint serves HTTP.
+Optional ingress and Flux examples are outside the application path. A custom hostname and HTTPS require your controller, DNS, and TLS configuration. For an isolated cluster, mirror the image and Git source into reachable services before connecting.
 
 ### After connecting
 
 ```sh
-# Set this to the target namespace selected in NKP for this cluster.
+# Use the target namespace selected in NKP.
 NKP_NAMESPACE="your-project-namespace"
+kubectl -n "$NKP_NAMESPACE" get pvc cloud-native-games-leaderboard
 kubectl -n "$NKP_NAMESPACE" rollout status deployment/cloud-native-games
 kubectl -n "$NKP_NAMESPACE" get svc cloud-native-games --watch
 ```
 
-Once `EXTERNAL-IP` shows an IP address or hostname, open `http://<external-ip-or-hostname>/`. The endpoint `http://<external-ip-or-hostname>/healthz` should return `ok`.
+Once `EXTERNAL-IP` shows an address, use that LoadBalancer endpoint to access the app. `/healthz` should return `ok`, and `/version.json` identifies the running build.
 
-If the address stays `<pending>`, inspect the Service events with `kubectl -n "$NKP_NAMESPACE" describe svc cloud-native-games` and check the cluster's load balancer configuration. A private address is reachable only from connected networks. Temporary access is available through `kubectl -n "$NKP_NAMESPACE" port-forward svc/cloud-native-games 8080:80`.
+If the PVC stays `Pending`, inspect its events and the default StorageClass. If the Service address stays `Pending`, inspect the Service events and load balancer configuration. A private address is reachable only from connected networks. For temporary local access:
 
-### Future application changes
-
-The publishing workflow tests the app, publishes a multi-architecture GHCR image, and commits its exact digest to the overlay. GitHub Actions has already written the initial digest successfully. Keep its package-write and repository-write permissions enabled and preserve the GHCR package's public visibility. Branch rules must permit the workflow's digest commit; if you later prohibit bot pushes, adapt delivery to deployment pull requests. Manifest-only changes are reconciled directly without rebuilding the application.
+```sh
+kubectl -n "$NKP_NAMESPACE" port-forward svc/cloud-native-games 8080:80
+```
 
 ## Files
 
-- `app/`: static game and simulation module.
-- `server.mjs`: dependency-free HTTP server with allowlisted assets, health and version endpoints.
-- `Dockerfile`: non-root Node container; no build step or runtime packages.
-- `deploy/`: Kubernetes base and demo overlay, resource limits and health probes.
-- `gitops/`: version-dependent Flux connection example.
-- `.github/workflows/publish.yaml`: CI and digest updates.
-- `docs/demo-runbook.md`: presentation steps and environment checklist.
+- `app/index.html`, `app/style.css`, `app/game.js`: event menu, canvas artwork, controls, result forms, and leaderboard views.
+- `app/race.js`: solo and VS sprint simulations.
+- `app/long-jump.js`: run-up, take-off, flight, landing, and foul rules.
+- `server.mjs`: HTTP server, allowlisted assets, health/version endpoints, and leaderboard API.
+- `leaderboard.mjs`: SQLite storage, input validation, event rankings, and duplicate submission handling.
+- `tests/`: simulation, HTTP, leaderboard, migration, and persistence tests.
+- `Dockerfile`: non-root Node 24 container with no dependency installation step.
+- `deploy/`: Kubernetes application, Service, persistent storage, and image overlay.
+- `.github/workflows/`: application tests, image publishing/digest updates, and manifest validation.
+- `gitops/`: optional Flux connection example.
+- `docs/demo-runbook.md`: presentation notes and environment checklist.
 
 ## Verification status
 
-JavaScript syntax checks and all nineteen simulation/HTTP and leaderboard tests pass. The pinned public image was pulled and its game, health and version endpoints were exercised under the Deployment's non-root, read-only filesystem and dropped-capability settings. The NKP overlay renders successfully with a Deployment, LoadBalancer Service and leaderboard PersistentVolumeClaim, both without fixed namespace fields.
+JavaScript syntax checks and all **19 automated tests** passed during development. They cover sprint and VS behavior, long-jump acceleration and timing, flight and distance measurement, false starts/fouls, HTTP asset serving, leaderboard validation and ordering, event separation, duplicate submissions, preservation of existing records, and persistence after server restart.
 
-NKP reconciliation, Kubernetes server-side admission, external address allocation require the target cluster/client and have not been verified here. Local Chromium checks cover solo and VS racing, key mappings, false starts, replay, menu switching and touch controls.
+Local Chromium checks exercised full keyboard and touch jumps, result submissions, shared distance rankings, foul exclusion, mobile layout, attempt cancellation, and switching between all three events. Earlier checks also covered Sprint/VS submissions and layouts. The container's non-root/read-only setup with writable storage and persistence after restart was verified while adding the leaderboards. Kubernetes manifests rendered successfully locally.
 
-## Next releases
+NKP reconciliation, server-side admission, storage provisioning, and external address allocation require the target cluster and have not been verified here. A pushed commit or local check does not establish that the latest build is running in that cluster.
 
-Hurdles; optional shared leaderboard API and database; optional real workload metrics. The UI's platform chips describe the intended architecture, not live cluster telemetry. The artwork and game logic are original. The header uses the supplied white Nutanix SVG logo, sized proportionally for desktop and mobile.
+## Future events
 
-Technical references:
+Hurdles and additional athletics events; optional workload metrics and leaderboard moderation. The UI's platform chips describe the intended architecture, not live cluster telemetry. The artwork and game logic are original, and the header uses the supplied white Nutanix SVG logo.
+
+## Technical references
+
 - https://fluxcd.io/flux/components/kustomize/kustomizations/
 - https://fluxcd.io/flux/components/source/gitrepositories/
 - https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images
-
-
-## Shared leaderboards
-
-Each game has a **Leaderboard** button with its fastest 100 submitted times, ranked by full-precision time. After a completed sprint, enter your name and company and select **Submit time**. In VS, only players who cross 100m before the race ends may submit; a dead heat offers both players a form. Losing players who have not finished and false starts have no qualifying time. Submissions are optional, and names and companies are visible to everyone using the app. Replay hides the previous submission forms. Personal bests continue to use browser storage.
-
-Results are shared across browsers and saved in SQLite using Node 24's built-in `node:sqlite` module. **Node.js 24 is now required.** Run `npm start` locally; the server creates ignored `data/leaderboard.sqlite`. To choose another writable location, set `LEADERBOARD_DB=/path/to/leaderboard.sqlite`. Back up this file to preserve results. No database credentials or dependency installation are needed.
-
-Kubernetes mounts a 1Gi PersistentVolumeClaim at `/data` and runs a single replica with a Recreate strategy so one server owns the database. The cluster needs a default StorageClass supporting ReadWriteOnce and volume permissions for UID/GID 1000. Updates briefly interrupt service; data survives pod replacement, but deleting the PVC removes the stored results. The container root filesystem remains read-only. For multiple replicas, migrate to an external database before increasing the replica count.
-
-The leaderboard is intended for a trusted demo: race times are supplied by the browser and are not independently verified, and there is no authenticated player identity or moderation interface. Do not treat it as a tamper-proof competition service. `npm test` includes API validation, event separation, ordering, duplicate submission protection and persistence across server restarts.
-
-
-## Long jump
-
-Choose **Long Jump** from the event menu. Wait for GO, alternate **A / L** (or the left/right arrows) to accelerate along a 30m runway, then press **Space** just before the white take-off board. Higher speed and a take-off nearer the board produce longer jumps. The athlete follows a flight arc and the landing is measured from the board in metres. Crossing the board without jumping is a foul; jumping so early that you miss the sand also gives no valid distance. Touch players have left/right step buttons and a **JUMP** button. Repeated or held keys do not add speed or trigger multiple jumps.
-
-Valid landings offer name/company inputs beside the distance in the result overlay. The event's **Leaderboard** button shows the longest 100 submitted jumps, ranked by distance descending. False starts and fouls have no submission form. Jump personal bests are stored separately from sprint times. Opening the leaderboard during an attempt or hiding the tab cancels that attempt.
-
-Jump results use a separate table in the existing SQLite database, created automatically on startup; existing Sprint and VS results remain intact. No additional service, storage volume, or deployment configuration is required. The same trusted-demo limitations apply: distances are supplied by the browser rather than verified by the server.
