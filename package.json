@@ -1,0 +1,8 @@
+{
+  "name": "cloud-native-games",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"start": "node server.mjs", "test": "node --test", "check": "node --check server.mjs && node --check app/game.js && node --check app/race.js"},
+  "engines": {"node": ">=22"}
+}

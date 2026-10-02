@@ -1,0 +1,29 @@
+name: Validate deployment manifests
+on:
+  pull_request:
+    paths:
+      - 'kustomization.yaml'
+      - 'deploy/**'
+      - '.github/workflows/validate-manifests.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'kustomization.yaml'
+      - 'deploy/**'
+      - '.github/workflows/validate-manifests.yaml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.34.1'
+      - name: Render NKP deployment
+        run: |
+          kubectl kustomize . > "$RUNNER_TEMP/cloud-native-games.yaml"
+          kubectl kustomize deploy/overlays/demo > "$RUNNER_TEMP/cloud-native-games-overlay.yaml"
+          diff -u "$RUNNER_TEMP/cloud-native-games.yaml" "$RUNNER_TEMP/cloud-native-games-overlay.yaml"

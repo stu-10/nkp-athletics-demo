@@ -1,0 +1,32 @@
+# Example only: confirm installed Flux CRDs, NKP project namespace and RBAC.
+# Use NKP's existing GitOps connection when available; do not create duplicate
+# reconcilers or bootstrap a second Flux installation.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: cloud-native-games
+  namespace: REPLACE_GITOPS_NAMESPACE
+spec:
+  interval: 1m
+  url: https://github.com/stu-10/nkp-track-field-demo.git
+  ref:
+    branch: main
+  # For private Git: create this secret separately in the namespace above.
+  # secretRef:
+  #   name: cloud-native-games-git-auth
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cloud-native-games
+  namespace: REPLACE_GITOPS_NAMESPACE
+spec:
+  interval: 1m
+  retryInterval: 30s
+  timeout: 3m
+  path: ./deploy/overlays/demo
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: cloud-native-games
