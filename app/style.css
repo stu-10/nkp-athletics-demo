@@ -6,3 +6,19 @@ header{gap:16px}.wordmark{display:flex;align-items:center;flex-shrink:0}.wordmar
 .result-entry{padding:24px 28px;border-bottom:1px solid var(--line)}.result-entry p,dialog p{color:var(--muted);font-size:13px}.result-entry form{display:flex;flex-wrap:wrap;gap:16px;align-items:end;margin-top:18px}.result-entry form h3{width:100%;font-size:20px}.result-entry label{display:flex;flex-direction:column;gap:8px;font-size:13px}.result-entry input{font:inherit;background:#252031;color:white;border:1px solid #77658f;border-radius:6px;padding:12px;max-width:100%}.result-entry form p{width:100%}dialog{background:var(--ink);color:white;border:1px solid var(--line);border-radius:18px;width:min(760px,95vw);max-height:85vh;padding:20px}dialog::backdrop{background:#000b}dialog .game-top{padding:0;gap:16px}.table-scroll{overflow:auto}table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:14px 10px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}th{color:#b8a5ff}td:last-child{white-space:nowrap;font-variant-numeric:tabular-nums}.game-top{gap:12px;flex-wrap:wrap}
 
 th:first-child,td:first-child{white-space:nowrap}input:focus-visible{outline:3px solid white;outline-offset:3px}button:disabled{opacity:.65;cursor:default}
+
+/* Keep leaderboard entry alongside the finish time, with room for both VS finishers. */
+.stadium:has(.result-entry:not([hidden])) canvas{position:absolute;inset:0;height:100%;object-fit:cover}
+.overlay:has(.result-entry:not([hidden])){position:relative;min-height:400px;background:#121018e8;padding:24px}
+.overlay .result-entry{width:100%;max-width:740px;padding:12px 0;border:0}
+.overlay .result-entry h2{font-size:18px;margin:0 0 8px}
+.overlay .result-entry>p{margin:0 0 12px;max-width:none}
+#result-forms{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:20px}
+.overlay .result-entry form{margin:0;gap:12px;text-align:left;padding:16px;background:#252031;border:1px solid #514264;border-radius:10px}
+.overlay .result-entry form h3{font-size:18px;margin:0}
+.overlay .result-entry label{flex:1;min-width:0}
+.overlay .result-entry input{width:100%;min-width:0}
+.overlay .result-entry form button{width:100%;padding:12px}
+.overlay .result-entry form p{font-size:12px;letter-spacing:normal;max-width:none;margin:0;line-height:1.5}
+.overlay .result-entry form p:empty{display:none}
+@media(max-width:640px){.overlay:has(.result-entry:not([hidden])){padding:20px 16px}.overlay .result-entry label{flex-basis:100%}#result-forms{gap:12px}}
