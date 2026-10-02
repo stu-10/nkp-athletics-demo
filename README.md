@@ -4,7 +4,7 @@ A purple, white and charcoal retro athletics demo for Nutanix Kubernetes Platfor
 
 ## Run locally
 
-Requires Node.js 22 or newer. No npm install is needed.
+Requires Node.js 24 or newer. No npm install is needed.
 
 ```sh
 npm start
@@ -38,7 +38,7 @@ Use these settings in NKP's existing GitOps application/source configuration:
 
 | Setting | Value |
 |---|---|
-| Repository URL | `https://github.com/stu-10/nkp-track-field-demo.git` |
+| Repository URL | `https://github.com/stu-10/nkp-athletics-demo.git` |
 | Branch | `main` |
 | Application path | `./` (repository root) |
 | Target namespace | Select the existing project namespace for that cluster in NKP |
@@ -53,9 +53,9 @@ The root `kustomization.yaml` includes the prepared demo overlay. If an existing
 ### Already completed
 
 - Application committed to `main`, with automated tests and a publishing workflow.
-- Published image available anonymously from `ghcr.io/stu-10/nkp-track-field-demo`, with Linux amd64 and arm64 variants.
+- Published image available anonymously from `ghcr.io/stu-10/nkp-athletics-demo`, with Linux amd64 and arm64 variants.
 - Deployment overlay pins the published image by SHA-256 digest; no bootstrap image is used by this overlay.
-- Deployment configured with two replicas, resource limits, health probes, a non-root user, and a read-only filesystem.
+- Deployment configured with one replica, resource limits, health probes, a non-root user, and a read-only filesystem.
 - Service configured as `LoadBalancer`, exposing HTTP port 80 to application port 8080.
 - Overlay leaves namespace assignment to NKP GitOps without creating or managing a namespace.
 - Manifest rendering checked locally and registered as a GitHub Actions check.
@@ -97,7 +97,7 @@ The publishing workflow tests the app, publishes a multi-architecture GHCR image
 
 ## Verification status
 
-JavaScript syntax checks and all eleven simulation/HTTP tests pass. The pinned public image was pulled and its game, health and version endpoints were exercised under the Deployment's non-root, read-only filesystem and dropped-capability settings. The NKP overlay renders successfully with only a Deployment and LoadBalancer Service, both without fixed namespace fields.
+JavaScript syntax checks and all twelve simulation/HTTP and leaderboard tests pass. The pinned public image was pulled and its game, health and version endpoints were exercised under the Deployment's non-root, read-only filesystem and dropped-capability settings. The NKP overlay renders successfully with a Deployment, LoadBalancer Service and leaderboard PersistentVolumeClaim, both without fixed namespace fields.
 
 NKP reconciliation, Kubernetes server-side admission, external address allocation require the target cluster/client and have not been verified here. Local Chromium checks cover solo and VS racing, key mappings, false starts, replay, menu switching and touch controls.
 
@@ -109,3 +109,14 @@ Technical references:
 - https://fluxcd.io/flux/components/kustomize/kustomizations/
 - https://fluxcd.io/flux/components/source/gitrepositories/
 - https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images
+
+
+## Shared leaderboards
+
+Each game has a **Leaderboard** button with its fastest 100 submitted times, ranked by full-precision time. After a completed sprint, enter your name and company and select **Submit time**. In VS, only players who cross 100m before the race ends may submit; a dead heat offers both players a form. Losing players who have not finished and false starts have no qualifying time. Submissions are optional, and names and companies are visible to everyone using the app. Replay hides the previous submission forms. Personal bests continue to use browser storage.
+
+Results are shared across browsers and saved in SQLite using Node 24's built-in `node:sqlite` module. **Node.js 24 is now required.** Run `npm start` locally; the server creates ignored `data/leaderboard.sqlite`. To choose another writable location, set `LEADERBOARD_DB=/path/to/leaderboard.sqlite`. Back up this file to preserve results. No database credentials or dependency installation are needed.
+
+Kubernetes mounts a 1Gi PersistentVolumeClaim at `/data` and runs a single replica with a Recreate strategy so one server owns the database. The cluster needs a default StorageClass supporting ReadWriteOnce and volume permissions for UID/GID 1000. Updates briefly interrupt service; data survives pod replacement, but deleting the PVC removes the stored results. The container root filesystem remains read-only. For multiple replicas, migrate to an external database before increasing the replica count.
+
+The leaderboard is intended for a trusted demo: race times are supplied by the browser and are not independently verified, and there is no authenticated player identity or moderation interface. Do not treat it as a tamper-proof competition service. `npm test` includes API validation, event separation, ordering, duplicate submission protection and persistence across server restarts.

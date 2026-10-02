@@ -7,7 +7,7 @@ function bestText(){ $('best').textContent=best ? best.toFixed(2)+'s' : '—'; }
 fetch('/version.json').then(r=>r.json()).then(v=>{ $('version').textContent=`v${v.version} · ${v.commit.slice(0,7)}`; $('banner').textContent=v.banner; }).catch(()=>{});
 function show(title,message,button='Race again') { $('overlay').classList.remove('hidden'); $('headline').textContent=title; $('message').textContent=message; $('start').firstChild.textContent=button+' '; $('status').textContent=title+' '+message; }
 function selectGame(next){
- soloRace.reset();versusRace.reset();mode=next;race=mode==='solo'?soloRace:versusRace;saved=false;
+ $('result-entry').hidden=true;soloRace.reset();versusRace.reset();mode=next;race=mode==='solo'?soloRace:versusRace;saved=false;
  $('game-menu').hidden=true;$('game-panel').hidden=false;
  for(const id of ['solo-scoreboard','solo-controls'])$(id).hidden=mode!=='solo';
  for(const id of ['versus-scoreboard','versus-controls'])$(id).hidden=mode!=='versus';
@@ -20,10 +20,10 @@ function selectGame(next){
 $('select-solo').addEventListener('click',()=>selectGame('solo'));
 $('select-versus').addEventListener('click',()=>selectGame('versus'));
 $('change-game').addEventListener('click',()=>{soloRace.reset();versusRace.reset();saved=false;$('game-panel').hidden=true;$('game-menu').hidden=false;$(mode==='solo'?'select-solo':'select-versus').focus();});
-$('start').addEventListener('click',()=>{ race.start(performance.now()); saved=false; $('overlay').classList.add('hidden'); $('status').textContent='On your marks. Wait for GO.'; });
+$('start').addEventListener('click',()=>{ $('result-entry').hidden=true;race.start(performance.now()); saved=false; $('overlay').classList.add('hidden'); $('status').textContent='On your marks. Wait for GO.'; });
 function step(side,player=0){if($('game-panel').hidden)return;if(mode==='solo')race.step(side,performance.now());else race.step(player,side,performance.now());}
 document.addEventListener('keydown',e=>{
- if($('game-panel').hidden||e.altKey||e.ctrlKey||e.metaKey)return;
+ if(e.target.closest?.('input, textarea, select')||$('leaderboard-dialog').open||$('game-panel').hidden||e.altKey||e.ctrlKey||e.metaKey)return;
  const key=e.key.toLowerCase();
  const mapping=mode==='solo'?{a:[0,'left'],l:[0,'right'],arrowleft:[0,'left'],arrowright:[0,'right']}:{a:[0,'left'],s:[0,'right'],k:[1,'left'],l:[1,'right']};
  if(mapping[key]){e.preventDefault();if(!e.repeat){const [player,side]=mapping[key];step(side,player);}}
@@ -125,6 +125,7 @@ function frame(now){
  }
  if(race.state==='finished'&&!saved){
   saved=true;
+  offerResults();
   if(mode==='versus'){
    $('callout').textContent='FINISH LINE';
    show(race.winner===null?'Dead heat!':`Player ${race.winner+1} wins!`,`${race.elapsed.toFixed(2)} seconds. Ready for a rematch?`,'Race again');
@@ -137,3 +138,33 @@ function frame(now){
  }
  requestAnimationFrame(frame);
 }requestAnimationFrame(frame);
+
+async function loadLeaderboard(){
+ $('leaderboard-title').textContent=(mode==='solo'?'100m Sprint':'VS Race')+' leaderboard';
+ $('leaderboard-rows').replaceChildren();$('leaderboard-status').textContent='Loading…';
+ try {const response=await fetch('/api/leaderboard?mode='+mode);if(!response.ok)throw new Error();const entries=await response.json();
+ entries.forEach((entry,i)=>{const row=document.createElement('tr');for(const value of [i+1,entry.name,entry.company,entry.seconds.toFixed(2)+'s']){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}$('leaderboard-rows').append(row);});
+ $('leaderboard-status').textContent=entries.length?'':'No times yet. Complete a race to set the first time!';
+ }catch{$('leaderboard-status').textContent='Unable to load the leaderboard. Close and try again.';}
+}
+$('view-leaderboard').addEventListener('click',()=>{
+ if(['countdown','running'].includes(race.state)){race.reset();show('Race paused','Start a fresh race when you close the leaderboard.','Start race');}
+ $('leaderboard-dialog').showModal();loadLeaderboard();
+});
+$('close-leaderboard').addEventListener('click',()=>$('leaderboard-dialog').close());
+function offerResults(){
+ const event=mode;
+ const finishers=mode==='solo'?[{label:'Your sprint',seconds:race.elapsed}]:race.players.flatMap((p,i)=>p.state==='finished'?[{label:`Player ${i+1}`,seconds:p.elapsed}]:[]);
+ $('result-forms').replaceChildren();$('result-entry').hidden=false;
+ for(const finisher of finishers){
+ const id=globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`,form=document.createElement('form');
+ const title=document.createElement('h3');title.textContent=finisher.label+' · '+finisher.seconds.toFixed(2)+'s';form.append(title);
+ const inputs={};for(const [field,max] of [['name',60],['company',100]]){const label=document.createElement('label');label.textContent=field==='name'?'Name':'Company';const input=document.createElement('input');input.required=true;input.maxLength=max;input.autocomplete=field==='name'?'name':'organization';label.append(input);form.append(label);inputs[field]=input;}
+ const button=document.createElement('button');button.textContent='Submit time';button.type='submit';form.append(button);
+ const status=document.createElement('p');status.setAttribute('role','status');form.append(status);
+ form.addEventListener('submit',async e=>{e.preventDefault();button.disabled=true;status.textContent='Saving…';
+ try{const response=await fetch('/api/leaderboard',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,mode:event,name:inputs.name.value,company:inputs.company.value,seconds:finisher.seconds})});const body=await response.json();if(!response.ok)throw new Error(body.error);status.textContent='Time saved! View the leaderboard to see your ranking.';for(const input of Object.values(inputs))input.disabled=true;button.textContent='Saved';}
+ catch(error){status.textContent=error.message || 'Unable to save. Try again.';button.disabled=false;}
+ });$('result-forms').append(form);
+ }
+}
