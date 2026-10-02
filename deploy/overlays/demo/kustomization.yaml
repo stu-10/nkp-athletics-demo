@@ -5,4 +5,4 @@ resources:
 images:
   - name: ghcr.io/stu-10/nkp-track-field-demo
     newName: ghcr.io/stu-10/nkp-athletics-demo
-    digest: sha256:1d928c1a3ac2734afd664636725a2014f24065277164de72efb37e47fc036a67
+    digest: sha256:440b11f001a16e0af93765911189d8369e4a1232daed45e967b0dcd627520e42
