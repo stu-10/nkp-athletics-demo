@@ -5,6 +5,7 @@ import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 test('leaderboards validate entries, separate events, sort, deduplicate and survive restart', async()=>{
  const dir=await mkdtemp(join(tmpdir(),'cng-leaderboard-'));
  let child;
@@ -28,6 +29,15 @@ test('leaderboards validate entries, separate events, sort, deduplicate and surv
   assert.equal((await fetch(base,{method:'POST',headers:{'Content-Type':'application/json'},body:'{'})).status,400);
   assert.equal((await fetch(base,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:'a'.repeat(5000)})})).status,413);
   assert.equal((await fetch(base,{method:'POST',body:'{}'})).status,415);
-  await stop();await start();assert.deepEqual(await (await fetch(base+'?mode=solo')).json(),solo);
+  // Simulate the pre-long-jump database schema; existing sprint/VS records must survive.
+  await stop();const legacy=new DatabaseSync(join(dir,'scores.sqlite'));legacy.exec('DROP TABLE IF EXISTS jump_results');legacy.close();await start();
+  assert.deepEqual(await (await fetch(base+'?mode=longjump')).json(),[]);
+  const jump={id:'jump-first',mode:'longjump',name:'Jumper',company:'Jump Co',meters:6.5};
+  assert.equal((await post(jump)).status,200);await post({...jump,id:'jump-longest',name:'Longest',meters:8.125});await post(jump);
+  const jumps=await (await fetch(base+'?mode=longjump')).json();assert.equal(jumps.length,2);assert.equal(jumps[0].name,'Longest');assert.equal(jumps[0].meters,8.125);assert.equal(jumps[1].meters,6.5);assert.ok(!('seconds' in jumps[0]));
+  for(const bad of [{meters:0},{meters:-1},{meters:13},{meters:'8'},{meters:null},{meters:undefined}])assert.equal((await post({...jump,...bad})).status,400);
+  assert.equal((await post({...jump,meters:undefined,seconds:10})).status,400);
+  assert.deepEqual(await (await fetch(base+'?mode=solo')).json(),solo);
+  await stop();await start();assert.deepEqual(await (await fetch(base+'?mode=longjump')).json(),jumps);assert.deepEqual(await (await fetch(base+'?mode=solo')).json(),solo);
  }finally{if(child)await stop();await rm(dir,{recursive:true,force:true});}
 });

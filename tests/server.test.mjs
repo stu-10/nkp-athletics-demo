@@ -11,7 +11,8 @@ test('server exposes game, health, version and rejects unknown files',async()=>{
  try {
    let ready=false;for(let i=0;i<50;i++){try{const r=await fetch('http://127.0.0.1:18081/healthz');if(r.ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,50));}
    assert.ok(ready,'server started');
-   const home=await fetch('http://127.0.0.1:18081/');assert.equal(home.status,200);assert.match(await home.text(),/100m Sprint/);assert.ok(home.headers.get('content-security-policy'));
+   const home=await fetch('http://127.0.0.1:18081/');assert.equal(home.status,200);const html=await home.text();assert.match(html,/100m Sprint/);assert.match(html,/Long Jump/);
+   const jumpModule=await fetch('http://127.0.0.1:18081/long-jump.js');assert.equal(jumpModule.status,200);assert.match(await jumpModule.text(),/class LongJump/);assert.ok(home.headers.get('content-security-policy'));
    const version=await fetch('http://127.0.0.1:18081/version.json');assert.equal((await version.json()).commit,'testcommit');
    assert.equal((await fetch('http://127.0.0.1:18081/package.json')).status,404);
    assert.equal((await fetch('http://127.0.0.1:18081/',{method:'POST'})).status,405);

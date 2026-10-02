@@ -1,6 +1,6 @@
 # Cloud Native Games
 
-A purple, white and charcoal retro athletics demo for Nutanix Kubernetes Platform. Browser-based athletics with a solo 100m sprint and a local two-player VS race, original canvas artwork, keyboard/touch controls, false starts and solo personal bests stored in the browser.
+A purple, white and charcoal retro athletics demo for Nutanix Kubernetes Platform. Browser-based athletics with a solo 100m sprint, a local two-player VS race, and long jump, original canvas artwork, keyboard/touch controls, false starts and solo personal bests stored in the browser.
 
 ## Run locally
 
@@ -97,13 +97,13 @@ The publishing workflow tests the app, publishes a multi-architecture GHCR image
 
 ## Verification status
 
-JavaScript syntax checks and all twelve simulation/HTTP and leaderboard tests pass. The pinned public image was pulled and its game, health and version endpoints were exercised under the Deployment's non-root, read-only filesystem and dropped-capability settings. The NKP overlay renders successfully with a Deployment, LoadBalancer Service and leaderboard PersistentVolumeClaim, both without fixed namespace fields.
+JavaScript syntax checks and all nineteen simulation/HTTP and leaderboard tests pass. The pinned public image was pulled and its game, health and version endpoints were exercised under the Deployment's non-root, read-only filesystem and dropped-capability settings. The NKP overlay renders successfully with a Deployment, LoadBalancer Service and leaderboard PersistentVolumeClaim, both without fixed namespace fields.
 
 NKP reconciliation, Kubernetes server-side admission, external address allocation require the target cluster/client and have not been verified here. Local Chromium checks cover solo and VS racing, key mappings, false starts, replay, menu switching and touch controls.
 
 ## Next releases
 
-Hurdles and long jump; optional shared leaderboard API and database; optional real workload metrics. The UI's platform chips describe the intended architecture, not live cluster telemetry. The artwork and game logic are original. The header uses the supplied white Nutanix SVG logo, sized proportionally for desktop and mobile.
+Hurdles; optional shared leaderboard API and database; optional real workload metrics. The UI's platform chips describe the intended architecture, not live cluster telemetry. The artwork and game logic are original. The header uses the supplied white Nutanix SVG logo, sized proportionally for desktop and mobile.
 
 Technical references:
 - https://fluxcd.io/flux/components/kustomize/kustomizations/
@@ -120,3 +120,12 @@ Results are shared across browsers and saved in SQLite using Node 24's built-in 
 Kubernetes mounts a 1Gi PersistentVolumeClaim at `/data` and runs a single replica with a Recreate strategy so one server owns the database. The cluster needs a default StorageClass supporting ReadWriteOnce and volume permissions for UID/GID 1000. Updates briefly interrupt service; data survives pod replacement, but deleting the PVC removes the stored results. The container root filesystem remains read-only. For multiple replicas, migrate to an external database before increasing the replica count.
 
 The leaderboard is intended for a trusted demo: race times are supplied by the browser and are not independently verified, and there is no authenticated player identity or moderation interface. Do not treat it as a tamper-proof competition service. `npm test` includes API validation, event separation, ordering, duplicate submission protection and persistence across server restarts.
+
+
+## Long jump
+
+Choose **Long Jump** from the event menu. Wait for GO, alternate **A / L** (or the left/right arrows) to accelerate along a 30m runway, then press **Space** just before the white take-off board. Higher speed and a take-off nearer the board produce longer jumps. The athlete follows a flight arc and the landing is measured from the board in metres. Crossing the board without jumping is a foul; jumping so early that you miss the sand also gives no valid distance. Touch players have left/right step buttons and a **JUMP** button. Repeated or held keys do not add speed or trigger multiple jumps.
+
+Valid landings offer name/company inputs beside the distance in the result overlay. The event's **Leaderboard** button shows the longest 100 submitted jumps, ranked by distance descending. False starts and fouls have no submission form. Jump personal bests are stored separately from sprint times. Opening the leaderboard during an attempt or hiding the tab cancels that attempt.
+
+Jump results use a separate table in the existing SQLite database, created automatically on startup; existing Sprint and VS results remain intact. No additional service, storage volume, or deployment configuration is required. The same trusted-demo limitations apply: distances are supplied by the browser rather than verified by the server.

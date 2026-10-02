@@ -1,38 +1,49 @@
+import { LongJump, TAKEOFF_BOARD } from './long-jump.js';
 import { Race, VersusRace } from './race.js';
-const $=id=>document.getElementById(id), soloRace=new Race(), versusRace=new VersusRace(), canvas=$('track'), ctx=canvas.getContext('2d');
+const $=id=>document.getElementById(id), soloRace=new Race(), versusRace=new VersusRace(), longJump=new LongJump(), canvas=$('track'), ctx=canvas.getContext('2d');
 let mode='solo', race=soloRace;
-let previous=performance.now(), saved=false, best=null;
+let previous=performance.now(), saved=false, best=null, jumpBest=null;
 try { const n=Number(localStorage.getItem('cng-best')); if(n>0 && Number.isFinite(n)) best=n; } catch {}
+try { const n=Number(localStorage.getItem('cng-jump-best')); if(n>0 && Number.isFinite(n)) jumpBest=n; } catch {}
+$('jump-best').textContent=jumpBest ? jumpBest.toFixed(2)+'m' : '—';
+const eventNames={solo:'100m Sprint',versus:'VS Race',longjump:'Long Jump'};
 function bestText(){ $('best').textContent=best ? best.toFixed(2)+'s' : '—'; } bestText();
 fetch('/version.json').then(r=>r.json()).then(v=>{ $('version').textContent=`v${v.version} · ${v.commit.slice(0,7)}`; $('banner').textContent=v.banner; }).catch(()=>{});
-function show(title,message,button='Race again') { $('overlay').classList.remove('hidden'); $('headline').textContent=title; $('message').textContent=message; $('start').firstChild.textContent=button+' '; $('status').textContent=title+' '+message; }
+function show(title,message,button=mode==='longjump'?'Try again':'Race again') { $('overlay').classList.remove('hidden'); $('headline').textContent=title; $('message').textContent=message; $('start').firstChild.textContent=button+' '; $('status').textContent=title+' '+message; }
+function resetEvents(){soloRace.reset();versusRace.reset();longJump.reset();}
 function selectGame(next){
- $('result-entry').hidden=true;soloRace.reset();versusRace.reset();mode=next;race=mode==='solo'?soloRace:versusRace;saved=false;
+ $('result-entry').hidden=true;resetEvents();mode=next;race={solo:soloRace,versus:versusRace,longjump:longJump}[mode];saved=false;
  $('game-menu').hidden=true;$('game-panel').hidden=false;
- for(const id of ['solo-scoreboard','solo-controls'])$(id).hidden=mode!=='solo';
- for(const id of ['versus-scoreboard','versus-controls'])$(id).hidden=mode!=='versus';
- $('event-label').textContent=mode==='solo'?'EVENT 01 · SOLO':'EVENT 02 · LOCAL TWO PLAYER';
- $('event-title').textContent=mode==='solo'?'100m Sprint':'VS Race · 100m';
- $('callout').textContent=mode==='solo'?'CHASE YOUR PERSONAL BEST':'WHITE: PLAYER 1 · GOLD: PLAYER 2';
- show(mode==='solo'?'Ready, athlete?':'Ready, racers?',mode==='solo'?'Alternate A and L to sprint. Timing is everything.':'Player 1: alternate A / S. Player 2: alternate K / L. Wait for GO!','Start race');
+ for(const [event,ids] of Object.entries({solo:['solo-scoreboard','solo-controls'],versus:['versus-scoreboard','versus-controls'],longjump:['jump-scoreboard','jump-controls']}))for(const id of ids)$(id).hidden=mode!==event;
+ $('game-panel').setAttribute('aria-label',eventNames[mode]+' game');
+ $('event-label').textContent={solo:'EVENT 01 · SOLO',versus:'EVENT 02 · LOCAL TWO PLAYER',longjump:'EVENT 03 · LONG JUMP'}[mode];
+ $('event-title').textContent=eventNames[mode];
+ $('callout').textContent={solo:'CHASE YOUR PERSONAL BEST',versus:'WHITE: PLAYER 1 · GOLD: PLAYER 2',longjump:'SPEED + TAKE-OFF TIMING'}[mode];
+ show(mode==='versus'?'Ready, racers?':'Ready, athlete?',{solo:'Alternate A and L to sprint. Timing is everything.',versus:'Player 1: alternate A / S. Player 2: alternate K / L. Wait for GO!',longjump:'Alternate A / L to build speed. Press Space just before the white take-off board. Wait for GO!'}[mode],mode==='longjump'?'Start attempt':'Start race');
  $('start').focus();
 }
-$('select-solo').addEventListener('click',()=>selectGame('solo'));
-$('select-versus').addEventListener('click',()=>selectGame('versus'));
-$('change-game').addEventListener('click',()=>{soloRace.reset();versusRace.reset();saved=false;$('game-panel').hidden=true;$('game-menu').hidden=false;$(mode==='solo'?'select-solo':'select-versus').focus();});
+for(const event of Object.keys(eventNames))$('select-'+event).addEventListener('click',()=>selectGame(event));
+$('change-game').addEventListener('click',()=>{resetEvents();saved=false;$('game-panel').hidden=true;$('game-menu').hidden=false;$('select-'+mode).focus();});
 $('start').addEventListener('click',()=>{ $('result-entry').hidden=true;race.start(performance.now()); saved=false; $('overlay').classList.add('hidden'); $('status').textContent='On your marks. Wait for GO.'; });
-function step(side,player=0){if($('game-panel').hidden)return;if(mode==='solo')race.step(side,performance.now());else race.step(player,side,performance.now());}
+function step(side,player=0){if($('game-panel').hidden)return;if(mode!=='versus')race.step(side,performance.now());else race.step(player,side,performance.now());}
 document.addEventListener('keydown',e=>{
  if(e.target.closest?.('input, textarea, select')||$('leaderboard-dialog').open||$('game-panel').hidden||e.altKey||e.ctrlKey||e.metaKey)return;
  const key=e.key.toLowerCase();
- const mapping=mode==='solo'?{a:[0,'left'],l:[0,'right'],arrowleft:[0,'left'],arrowright:[0,'right']}:{a:[0,'left'],s:[0,'right'],k:[1,'left'],l:[1,'right']};
+ if(mode==='longjump' && e.code==='Space'){
+  // Space on a focused button retains its normal activation behavior outside an attempt.
+  if(['countdown','running','airborne'].includes(race.state)){e.preventDefault();if(!e.repeat)race.jump(performance.now());}
+  return;
+ }
+ const mapping=mode!=='versus'?{a:[0,'left'],l:[0,'right'],arrowleft:[0,'left'],arrowright:[0,'right']}:{a:[0,'left'],s:[0,'right'],k:[1,'left'],l:[1,'right']};
  if(mapping[key]){e.preventDefault();if(!e.repeat){const [player,side]=mapping[key];step(side,player);}}
 });
 for(const side of ['left','right'])$(side).addEventListener('pointerdown',e=>{e.preventDefault();step(side);});
+for(const side of ['left','right'])$('jump-'+side).addEventListener('pointerdown',e=>{e.preventDefault();step(side);});
+for(const event of ['pointerdown','click'])$('jump-button').addEventListener(event,e=>{e.preventDefault();if(mode==='longjump')race.jump(performance.now());});
 for(let player=0;player<2;player++)for(const side of ['left','right'])$(`p${player+1}-${side}`).addEventListener('pointerdown',e=>{e.preventDefault();step(side,player);});
-document.addEventListener('visibilitychange',()=>{if(document.hidden && ['countdown','running'].includes(race.state)){race.reset();show('Race paused','The tab was hidden. Start a fresh race.');}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden && ['countdown','running','airborne'].includes(race.state)){race.reset();show(mode==='longjump'?'Attempt paused':'Race paused','The tab was hidden. Start a fresh attempt.');}});
 // Keyframed sprint poses separate extension, heel recovery, and knee drive.
-function athlete(x,y,color,distance,speed,lane){
+function athlete(x,y,color,distance,speed,lane,airborne=false){
  const moving=speed>.05, effort=Math.min(1,speed/10);
  const phase=distance*Math.PI*2/4.8+lane*.7;
  const bob=moving?-(Math.sin(phase*2)**2)*1.5*effort:0;
@@ -60,6 +71,7 @@ function athlete(x,y,color,distance,speed,lane){
    thigh=(a[1]+(b[1]-a[1])*blend)*(.55+.45*effort);
    flex=.08+(a[2]+(b[2]-a[2])*blend-.08)*(.5+.5*effort);
   }
+  if(airborne){thigh=far ? .75 : 1.15;flex=far ? .8 : 1.25;}
   const knee={x:hip.x+Math.sin(thigh)*12,y:hip.y+Math.cos(thigh)*12};
   const foot={x:knee.x+Math.sin(thigh-flex)*12,y:knee.y+Math.cos(thigh-flex)*12};
   stroke([hip,knee],5,far?'#767080':'#ece9f5');
@@ -67,14 +79,14 @@ function athlete(x,y,color,distance,speed,lane){
   stroke([{x:foot.x-2,y:foot.y},{x:foot.x+5,y:foot.y-1}],3,far?'#292332':'#fff');
  }
  function arm(offset,far){
-  const swing=moving?-Math.cos(phase+offset)*1.05*(.5+.5*effort):-.15;
+  const swing=airborne?-1:moving?-Math.cos(phase+offset)*1.05*(.5+.5*effort):-.15;
   const elbow={x:shoulder.x+Math.sin(swing)*9,y:shoulder.y+Math.cos(swing)*9};
   // The bent forearm swings with the upper arm, driving towards the face.
   const hand={x:elbow.x+Math.cos(swing)*8,y:elbow.y-Math.sin(swing)*8};
   stroke([shoulder,elbow,hand],3,far?'#956a50':skin);
  }
  ctx.save();
- ctx.fillStyle='#23183b55';ctx.beginPath();ctx.ellipse(x+1,y+3,14,2.5,0,0,Math.PI*2);ctx.fill();
+ if(!airborne){ctx.fillStyle='#23183b55';ctx.beginPath();ctx.ellipse(x+1,y+3,14,2.5,0,0,Math.PI*2);ctx.fill();}
  arm(Math.PI,true);leg(.5,true);
  stroke([hip,shoulder],9,color);
  stroke([{x:hip.x-3,y:hip.y},{x:hip.x+3,y:hip.y}],6,'#342a4c');
@@ -85,7 +97,32 @@ function athlete(x,y,color,distance,speed,lane){
  ctx.fillStyle='#292332';ctx.fillRect(shoulder.x+3,shoulder.y-8,1,1);
  ctx.restore();
 }
+function drawLongJump(now){
+ const w=canvas.width,mobile=w<640,origin=mobile?24:100,scale=(w-origin-20)/42,board=origin+TAKEOFF_BOARD*scale,ground=282;
+ ctx.fillStyle='#25212e';ctx.fillRect(0,0,w,400);
+ for(let row=0;row<4;row++)for(let col=0;col<Math.ceil(w/14);col++){ctx.fillStyle=['#514466','#756288','#aaa0b9','#393241'][(row*3+col*7)%4];ctx.fillRect(col*14+3,18+row*14,7,7);}
+ ctx.fillStyle='#19161f';ctx.fillRect(0,82,w,40);ctx.fillStyle='#b6a0ff';ctx.font='bold 13px monospace';ctx.fillText(mobile?'LONG JUMP · RUN / JUMP / LAND':'LONG JUMP     /     RUN · TAKE OFF · LAND',mobile?16:28,107);
+ ctx.fillStyle='#7855fa';ctx.fillRect(0,160,board,164);
+ ctx.fillStyle='#d9cdfd';ctx.fillRect(0,160,board,3);ctx.fillRect(0,321,board,3);
+ ctx.fillStyle='#d2ac72';ctx.fillRect(board,160,w-board,164);
+ for(let i=0;i<180;i++){ctx.fillStyle=i%2?'#b38b58':'#e4c48f';ctx.fillRect(board+(i*37)%Math.max(1,w-board-5),166+(i*23)%150,3,2);}
+ ctx.fillStyle='#fff';ctx.fillRect(board-5,160,5,164);
+ ctx.fillStyle='#ffd166';ctx.fillRect(board,160,3,164);
+ ctx.font='bold 12px monospace';ctx.fillStyle='#eee8ff';ctx.fillText('30m RUN-UP',origin,355);ctx.fillText(mobile?'BOARD':'TAKE-OFF BOARD',board-(mobile?40:115),143);
+ for(let m=mobile?4:2;m<=12;m+=mobile?4:2){const x=board+m*scale;ctx.fillStyle='#523d28';ctx.fillRect(x,309,2,15);ctx.fillText(m+'m',x-9,348);}
+ const running=race.state==='running',airborne=race.state==='airborne',x=origin+Math.min(race.distance,TAKEOFF_BOARD+12)*scale;
+ if(airborne){ctx.fillStyle='#23183b55';ctx.beginPath();ctx.ellipse(x,ground+3,14,2.5,0,0,Math.PI*2);ctx.fill();}
+ athlete(x,ground-race.height*60,'#fff',race.distance,running?race.speed:airborne?race.launchSpeed:0,2,airborne);
+ if(race.state==='finished'){ctx.fillStyle='#523d28';ctx.beginPath();ctx.ellipse(x,ground+3,12,5,0,0,Math.PI*2);ctx.fill();}
+ ctx.textAlign='center';
+ if(race.state==='countdown'){ctx.fillStyle='#fff';ctx.font='bold 64px monospace';ctx.fillText(String(Math.max(1,Math.ceil((race.startAt-now)/1000))),board/2,230);ctx.font='16px monospace';ctx.fillText('WAIT FOR GO!',board/2,262);}
+ if(running){const remaining=TAKEOFF_BOARD-race.distance;ctx.fillStyle=remaining<=4?'#ffd166':'#fff';ctx.font=`bold ${mobile?16:26}px monospace`;ctx.fillText(remaining<=4?'SPACE · JUMP NOW!':race.elapsed<.65?'GO!':'A + L · BUILD SPEED',w/2,380);}
+ ctx.textAlign='left';
+}
 function draw(now){
+ const width=mode==='longjump' && canvas.clientWidth<640 ? Math.max(320,Math.round(canvas.clientWidth)) : 1100;
+ if(canvas.width!==width)canvas.width=width;
+ if(mode==='longjump'){drawLongJump(now);return;}
  const w=1100;ctx.fillStyle='#25212e';ctx.fillRect(0,0,w,400);
  for(let row=0;row<4;row++)for(let col=0;col<80;col++){ctx.fillStyle=['#514466','#756288','#aaa0b9','#393241'][(row*3+col*7)%4];ctx.fillRect(col*14+3,18+row*14,7,7);}
  ctx.fillStyle='#19161f';ctx.fillRect(0,82,w,40);ctx.fillStyle='#b6a0ff';ctx.font='bold 13px monospace';ctx.fillText('CLOUD NATIVE GAMES     /     COMMIT → BUILD → DEPLOY',28,107);
@@ -114,19 +151,28 @@ function frame(now){
  const dt=Math.min((now-previous)/1000,.05);previous=now;race.update(now,dt);draw(now);
  if(mode==='solo'){
   $('time').innerHTML=race.elapsed.toFixed(2)+'<span>s</span>';$('distance').innerHTML=Math.floor(race.distance)+'<span>m</span>';
+ }else if(mode==='longjump'){
+  $('jump-speed').innerHTML=race.speed.toFixed(1)+'<span>m/s</span>';
+  $('jump-board').innerHTML=Math.max(0,TAKEOFF_BOARD-race.distance).toFixed(1)+'<span>m</span>';
  }else{
   $('vs-time').innerHTML=race.elapsed.toFixed(2)+'<span>s</span>';
   race.players.forEach((p,i)=>{$(`p${i+1}-distance`).innerHTML=Math.floor(p.distance)+'<span>m</span>';});
  }
  if(race.state==='false-start'&&!saved){
   saved=true;
-  if(mode==='solo')show('False start!','Wait for the countdown to finish before taking your first step.');
+  if(mode!=='versus')show('False start!','Wait for the countdown to finish before taking your first step.');
   else show(`Player ${race.winner+1} wins!`,`Player ${race.offender+1} false-started. Wait for GO before taking a step.`);
  }
+ if(race.state==='foul'&&!saved){saved=true;$('callout').textContent='NO VALID DISTANCE';show('Foul jump!',race.foulReason,'Try again');}
  if(race.state==='finished'&&!saved){
   saved=true;
   offerResults();
-  if(mode==='versus'){
+  if(mode==='longjump'){
+   const record=!jumpBest||race.jumpDistance>jumpBest;
+   if(record){jumpBest=race.jumpDistance;try{localStorage.setItem('cng-jump-best',String(jumpBest));}catch{}$('jump-best').textContent=jumpBest.toFixed(2)+'m';}
+   $('callout').textContent=record?'NEW PERSONAL BEST':'IN THE SAND';
+   show(race.jumpDistance.toFixed(2)+' metres',record?'Your longest jump yet! Add your name to the leaderboard.':'Build more speed and jump closer to the board to go further.','Jump again');
+  }else if(mode==='versus'){
    $('callout').textContent='FINISH LINE';
    show(race.winner===null?'Dead heat!':`Player ${race.winner+1} wins!`,`${race.elapsed.toFixed(2)} seconds. Ready for a rematch?`,'Race again');
   }else{
@@ -140,30 +186,33 @@ function frame(now){
 }requestAnimationFrame(frame);
 
 async function loadLeaderboard(){
- $('leaderboard-title').textContent=(mode==='solo'?'100m Sprint':'VS Race')+' leaderboard';
+ $('leaderboard-title').textContent=eventNames[mode]+' leaderboard';
+ $('leaderboard-score-label').textContent=mode==='longjump'?'Distance':'Time';
+ $('leaderboard-note').textContent=mode==='longjump'?'Longest 100 submitted jumps. Distances are reported by the game.':'Fastest 100 submitted times. Times are reported by the game.';
  $('leaderboard-rows').replaceChildren();$('leaderboard-status').textContent='Loading…';
  try {const response=await fetch('/api/leaderboard?mode='+mode);if(!response.ok)throw new Error();const entries=await response.json();
- entries.forEach((entry,i)=>{const row=document.createElement('tr');for(const value of [i+1,entry.name,entry.company,entry.seconds.toFixed(2)+'s']){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}$('leaderboard-rows').append(row);});
- $('leaderboard-status').textContent=entries.length?'':'No times yet. Complete a race to set the first time!';
+ entries.forEach((entry,i)=>{const row=document.createElement('tr');for(const value of [i+1,entry.name,entry.company,mode==='longjump'?entry.meters.toFixed(2)+'m':entry.seconds.toFixed(2)+'s']){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}$('leaderboard-rows').append(row);});
+ $('leaderboard-status').textContent=entries.length?'':mode==='longjump'?'No jumps yet. Land a valid jump to set the first distance!':'No times yet. Complete a race to set the first time!';
  }catch{$('leaderboard-status').textContent='Unable to load the leaderboard. Close and try again.';}
 }
 $('view-leaderboard').addEventListener('click',()=>{
- if(['countdown','running'].includes(race.state)){race.reset();show('Race paused','Start a fresh race when you close the leaderboard.','Start race');}
+ if(['countdown','running','airborne'].includes(race.state)){race.reset();show(mode==='longjump'?'Attempt paused':'Race paused','Start a fresh attempt when you close the leaderboard.',mode==='longjump'?'Start attempt':'Start race');}
  $('leaderboard-dialog').showModal();loadLeaderboard();
 });
 $('close-leaderboard').addEventListener('click',()=>$('leaderboard-dialog').close());
 function offerResults(){
  const event=mode;
- const finishers=mode==='solo'?[{label:'Your sprint',seconds:race.elapsed}]:race.players.flatMap((p,i)=>p.state==='finished'?[{label:`Player ${i+1}`,seconds:p.elapsed}]:[]);
+ $('result-title').textContent=mode==='longjump'?'Add your jump':'Add your time';
+ const finishers=mode==='longjump'?[{label:'Your jump',meters:race.jumpDistance}]:mode==='solo'?[{label:'Your sprint',seconds:race.elapsed}]:race.players.flatMap((p,i)=>p.state==='finished'?[{label:`Player ${i+1}`,seconds:p.elapsed}]:[]);
  $('result-forms').replaceChildren();$('result-entry').hidden=false;
  for(const finisher of finishers){
  const id=globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`,form=document.createElement('form');
- const title=document.createElement('h3');title.textContent=finisher.label+' · '+finisher.seconds.toFixed(2)+'s';form.append(title);
+ const title=document.createElement('h3');title.textContent=finisher.label+' · '+(event==='longjump'?finisher.meters.toFixed(2)+'m':finisher.seconds.toFixed(2)+'s');form.append(title);
  const inputs={};for(const [field,max] of [['name',60],['company',100]]){const label=document.createElement('label');label.textContent=field==='name'?'Name':'Company';const input=document.createElement('input');input.required=true;input.maxLength=max;input.autocomplete=field==='name'?'name':'organization';label.append(input);form.append(label);inputs[field]=input;}
- const button=document.createElement('button');button.textContent='Submit time';button.type='submit';form.append(button);
+ const button=document.createElement('button');button.textContent=event==='longjump'?'Submit distance':'Submit time';button.type='submit';form.append(button);
  const status=document.createElement('p');status.setAttribute('role','status');form.append(status);
  form.addEventListener('submit',async e=>{e.preventDefault();button.disabled=true;status.textContent='Saving…';
- try{const response=await fetch('/api/leaderboard',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,mode:event,name:inputs.name.value,company:inputs.company.value,seconds:finisher.seconds})});const body=await response.json();if(!response.ok)throw new Error(body.error);status.textContent='Time saved! View the leaderboard to see your ranking.';for(const input of Object.values(inputs))input.disabled=true;button.textContent='Saved';}
+ try{const response=await fetch('/api/leaderboard',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,mode:event,name:inputs.name.value,company:inputs.company.value,...(event==='longjump'?{meters:finisher.meters}:{seconds:finisher.seconds})})});const body=await response.json();if(!response.ok)throw new Error(body.error);status.textContent='Result saved! View the leaderboard to see your ranking.';for(const input of Object.values(inputs))input.disabled=true;button.textContent='Saved';}
  catch(error){status.textContent=error.message || 'Unable to save. Try again.';button.disabled=false;}
  });$('result-forms').append(form);
  }

@@ -22,3 +22,7 @@ th:first-child,td:first-child{white-space:nowrap}input:focus-visible{outline:3px
 .overlay .result-entry form p{font-size:12px;letter-spacing:normal;max-width:none;margin:0;line-height:1.5}
 .overlay .result-entry form p:empty{display:none}
 @media(max-width:640px){.overlay:has(.result-entry:not([hidden])){padding:20px 16px}.overlay .result-entry label{flex-basis:100%}#result-forms{gap:12px}}
+
+.game-choices{grid-template-columns:repeat(3,minmax(0,1fr))}.game-choice{min-width:0}.game-choice>strong{font-size:28px}#jump-button{background:var(--purple);border-color:#b8a5ff}@media(max-width:800px){.game-choices{grid-template-columns:1fr}}
+
+@media(max-width:640px){.arcade:has(#jump-controls:not([hidden])) canvas{object-fit:fill}}

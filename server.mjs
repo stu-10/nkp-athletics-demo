@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 const root = new URL('./app/', import.meta.url);
-const files = new Map([['/', 'index.html'], ['/index.html', 'index.html'], ['/style.css', 'style.css'], ['/game.js', 'game.js'], ['/race.js', 'race.js'], ['/nutanix-logo.svg', 'nutanix-logo.svg']]);
+const files = new Map([['/', 'index.html'], ['/index.html', 'index.html'], ['/style.css', 'style.css'], ['/game.js', 'game.js'], ['/race.js', 'race.js'], ['/long-jump.js', 'long-jump.js'], ['/nutanix-logo.svg', 'nutanix-logo.svg']]);
 const mime = {html:'text/html', css:'text/css', js:'text/javascript', svg:'image/svg+xml'};
 const server = createServer(async (req, res) => {
   const path = new URL(req.url, 'http://localhost').pathname;
@@ -14,7 +14,7 @@ const server = createServer(async (req, res) => {
     try {
       if(req.method==='GET') {
         const mode=new URL(req.url,'http://localhost').searchParams.get('mode');
-        if(!['solo','versus'].includes(mode)) {res.writeHead(400);return res.end(JSON.stringify({error:'Choose a valid event.'}));}
+        if(!['solo','versus','longjump'].includes(mode)) {res.writeHead(400);return res.end(JSON.stringify({error:'Choose a valid event.'}));}
         return res.end(JSON.stringify(rankings(mode)));
       }
       if(req.method==='POST') {
